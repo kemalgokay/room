@@ -1,0 +1,666 @@
+
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <GLUT/glut.h>//çizimlerin yapıldığı varolduğu library sınıfı
+#include <OpenGL/gl.h>//opengl herşeyi üçgenler vasıtasıyla çizer.
+
+int press_x, press_y;
+int release_x, release_y;
+float x_angle = 0.0;
+float y_angle = 0.0;
+float scale_size = 1.0;
+float camera_distance = 5.0;
+double zoom;
+int xform_mode = 0;
+//---------------------------------------------------------
+#define XFORM_NONE    0
+#define XFORM_ROTATE  1
+#define XFORM_SCALE   2
+
+#define BASE_HEIGHT  0.25
+#define BASE_WIDE    0.05
+
+typedef struct{
+    GLfloat ambient[4];
+    GLfloat diffuse[4];
+    GLfloat specular[4];
+    GLfloat shininess;
+} material;
+
+int no_light = 0;
+int draw_texture = 0;
+
+
+GLubyte checkImage[64][64][4];
+GLubyte readImage[400][400][4];
+GLubyte texImage[256][256][4];
+GLubyte texImage2[256][512][4];
+GLubyte texImage3[256][512][4];
+void doZoom();
+void special(int key, int x, int y);
+
+void makeCheckImage()
+{
+    for (int i=0; i<64; i++)
+        for (int j=0; j<64; j++) {
+            int c = ((((i&0x8)==0)^((j&0x8))==0))*255;
+            checkImage[i][j][0] = (GLubyte) c;
+            checkImage[i][j][1] = (GLubyte) c;
+            checkImage[i][j][2] = (GLubyte) c;
+            checkImage[i][j][3] = (GLubyte) 255;
+        };
+}
+
+
+void read_Image()
+{
+    FILE* in = fopen("buck.ppm", "r");
+    
+    int height, width, ccv;
+    char header[100];
+    
+    
+
+    int r, g, b;
+    
+    for (int i=height-1; i>=0; i--)
+        for (int j=0; j<width; j++)
+        {
+           
+            readImage[i][j][0] = (GLubyte)r;
+            readImage[i][j][1] = (GLubyte)g;
+            readImage[i][j][2] = (GLubyte )b;
+            readImage[i][j][3] = 255;
+        }
+    
+    for (int i=0; i<256; i++)
+        for ( int j=0; j<256; j++) {
+            if (i<height && j <width) {
+                texImage[i][j][0] = readImage[i][j][0];
+                texImage[i][j][1] = readImage[i][j][1];
+                texImage[i][j][2] = readImage[i][j][2];
+                texImage[i][j][3] = 255;
+            }
+            else {
+                texImage[i][j][0] = 0;
+                texImage[i][j][1] = 0;
+                texImage[i][j][2] = 0;
+                texImage[i][j][3] = 255;
+            }
+        }
+    
+    fclose(in);
+}
+
+void read_Image2()
+{
+    FILE* in = fopen("deneme.jpg", "r");
+    
+    int height, width, ccv;
+    char header[100];
+    
+    
+  
+    int r, g, b;
+    
+    for (int i=height-1; i>=0; i--)
+        for (int j=0; j<width; j++)
+        {
+            fscanf(in, "%d %d %d", &r, &g, &b);
+            readImage[i][j][0] = (GLubyte)r;
+            readImage[i][j][1] = (GLubyte)g;
+            readImage[i][j][2] = (GLubyte )b;
+            readImage[i][j][3] = 255;
+        }
+    
+    for (int i=0; i<256; i++)
+        for ( int j=0; j<512; j++) {
+            if (i<height && j <width) {
+                texImage2[i][j][0] = readImage[i][j][0];
+                texImage2[i][j][1] = readImage[i][j][1];
+                texImage2[i][j][2] = readImage[i][j][2];
+                texImage2[i][j][3] = 255;
+            }
+            else {
+                texImage2[i][j][0] = 0;
+                texImage2[i][j][1] = 0;
+                texImage2[i][j][2] = 0;
+                texImage2[i][j][3] = 255;
+            }
+        }
+    
+    fclose(in);
+}
+/*void read_Image3(){
+    FILE* in=fopen("deneme.ppm", "r");
+    
+    int yuk,gen,ccv;
+    char header[200];
+    
+    int r,g,b;
+    for(int i=yuk-1;i>0;i--){
+        for(int j=0;j<gen;j++){
+            if(i<yuk && j< gen){
+                
+                fscanf(file, "%d %d %d", &r, &g, &b);
+                readImage[i][j][0] = (GLubyte)r;
+                readImage[i][j][1] = (GLubyte)g;
+                readImage[i][j][2] = (GLubyte )b;
+                readImage[i][j][3] = 255;
+
+        }
+            
+            for (int i=0; i<256; i++)
+                for ( int j=0; j<512; j++) {
+                    if (i<yuk   && j <gen) {
+                        texImage2[i][j][0] = readImage[i][j][0];
+                        texImage2[i][j][1] = readImage[i][j][1];
+                        texImage2[i][j][2] = readImage[i][j][2];
+                        texImage2[i][j][3] = 255;
+                    }
+                    else {
+                        texImage2[i][j][0] = 0;
+                        texImage2[i][j][1] = 0;
+                        texImage2[i][j][2] = 0;
+                        texImage2[i][j][3] = 255;
+                    }
+                }
+
+    }
+    
+    fclose(file);
+}*/
+
+void draw_axes()
+{
+    glLineWidth(2.0);
+    glBegin(GL_LINES);
+    glColor3f(1,1,0);
+    glVertex3f(0,0,0);
+    glVertex3f(.15,0,0);
+    glColor3f(0,1,0);
+    glVertex3f(0,0,0);
+    glVertex3f(0,.15,0);
+    glColor3f(0,0,1);
+    glVertex3f(0,0,0);
+    glVertex3f(0,0,.15);
+    glEnd();
+    glLineWidth(1.0);
+}
+
+void draw_floor()
+{
+    glColor4f(.0,.6,0,1);
+    glPushMatrix();
+    glScalef(4, 0.01, 4);
+    glBegin(GL_QUADS);
+    glNormal3f(-1,0,1);
+    glTexCoord2f(0,0);
+    glVertex3f(-0.5, 0, 0.5);
+    glNormal3f(1,0,1);
+    glTexCoord2f(0,1);
+    glVertex3f(0.5, 0, 0.5);
+    glNormal3f(1,0,-1);
+    glTexCoord2d(1,1);
+    glVertex3f(0.5, 0 , -0.5);
+    glNormal3f(-1, 0, -1);
+    glTexCoord2d(1,0);
+    glVertex3f(-0.5, 0, -0.5);
+    glEnd();
+    glutSolidCube(1.0);
+    glPopMatrix();
+}
+
+void draw_wall()
+{
+    glColor4f(.6,.6,2,1);
+    glPushMatrix();
+    glScalef(3, 0.01, 4);
+    glutSolidCube(1.0);
+    glPopMatrix();
+}
+
+void draw_picture()
+{
+    glColor4f(1,1,1,1);
+    glPushMatrix();
+    glScalef(3, 0.01, 4);
+    glBegin(GL_QUADS);
+    glTexCoord2d(0, 221/255.0);
+    glVertex3f(-0.5, 0, 0.5);
+    glTexCoord2d(0,0);
+    glVertex3f(0.1, 0, 0.5);
+    glTexCoord2d(199/255.0,0);
+    glVertex3f(0.5, 0 , -0.5);
+    glTexCoord2d(200/255.0,221/255.0);
+    glVertex3f(-0.5, 0, -0.5);
+    glEnd();
+    glPopMatrix();
+}
+
+
+void draw_picture2()
+{
+    glColor4f(1,1,1,1);
+    glPushMatrix();
+    glScalef(3, 1, 4);
+    glBegin(GL_QUADS);
+    
+    glTexCoord2d(0,0);
+    glVertex3f(-0.5, 0, -0.5);
+    
+    glTexCoord2d(299/511.0,0);
+    glVertex3f(-0.5, 0, 0.5);
+    
+    glTexCoord2d(299/511.0,205/255.0);
+    glVertex3f(0.5, 0 , 0.5);
+    glTexCoord2d(0,205/255.0);
+    glVertex3f(0.5, 0, -0.5);
+    glEnd();
+    glPopMatrix();
+}
+
+
+void draw_leg(float xt, float yt, float zt)
+{
+    glPushMatrix();
+    glTranslatef(xt, yt, zt);
+    glScalef(0.1, 1, 0.1);
+    glutSolidCube(1.0);
+    glPopMatrix();
+}
+
+
+//   draw a table - one table top with four legs
+void draw_table()
+{
+    glColor4f(.5,.5, .5,1);
+    
+    glPushMatrix();
+    glScalef(2, 0.1, 2);
+    glutSolidCube(1.0);
+    glPopMatrix();
+    
+    draw_leg(0.95,-0.5,-0.95);
+    draw_leg(0.95,-0.5,0.95);
+    draw_leg(-0.95,-0.5,-0.95);
+    draw_leg(-0.95,-0.5,0.95);
+}
+
+void draw_base()
+{
+    GLUquadricObj *p = gluNewQuadric();
+     gluQuadricDrawStyle(p, GLU_LINE);
+    glPushMatrix();
+    glScalef(BASE_WIDE*3,BASE_WIDE*3,BASE_HEIGHT);
+    gluCylinder(p, 1, 1, 1, 30, 30);
+    glPopMatrix();
+}
+
+void draw_arm()
+{
+    GLUquadricObj *p = gluNewQuadric();
+    //  gluQuadricDrawStyle(p, GLU_LINE);
+    glPushMatrix();
+    glScalef(BASE_WIDE*1, BASE_WIDE*1, BASE_HEIGHT*2);
+    glutSolidCube(1.0);
+    glPopMatrix();
+}
+
+void draw_top()
+{
+    glPushMatrix();
+    glutSolidCone(0.3, 0.1, 10, 10);
+    glPopMatrix();
+}
+
+// draw a lamp
+void draw_lamp()
+{
+    glColor3f(1,0,0);
+    draw_base();
+    glColor3f(1,1,0);
+    glTranslatef(0,  0, BASE_HEIGHT*2);
+    draw_arm();
+    glTranslatef(0,0,BASE_HEIGHT);
+    draw_top();
+}
+
+//////////////////////////////////////////////
+
+void draw_teapot()
+{
+    glColor4f(1,0,0,1);
+    glutSolidTeapot(0.5);
+}
+
+//////////////////////////////////////////////
+
+void draw_cube()
+{
+    glColor4f(1,1,0,1);
+    glutSolidCube(1.0);
+}
+//////////////////////////////////////////////
+
+void draw_glas(){
+    glColor4f(1,0, 1, 1);
+    glutSolidTorus(1, 1, 1, 1);
+}
+
+
+
+void display()
+{
+    
+    glClearColor(0,0,0,1);  // specify the background color
+    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT); //clear framebuffer
+    
+    glEnable(GL_DEPTH_TEST);
+    if (!no_light) {
+        glEnable(GL_LIGHTING);
+        glEnable(GL_LIGHT0);
+    }
+    glEnable(GL_NORMALIZE);   // normalize normals
+    
+    // doku kaplama ayarlanmasi.
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER,
+                    GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER,
+                    GL_NEAREST);
+    glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
+    glTexEnvf(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE, GL_REPLACE);
+    
+    
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
+    
+    // projeksiyon mtarisi kurulumu
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(60, 1, .1, 100);
+    
+    
+    // model view matrisi kurulumu.
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    
+    //aydınlatma parametreleri ayarlanmasi.
+    GLfloat light_ambient[] = {0,0,0,1};
+    GLfloat light_diffuse[] = {.6,.6,.6,1};
+    GLfloat light_specular[] = {1,1,1,1};
+    GLfloat light_pos[] = {1,1,1,0};
+    
+    glLightfv(GL_LIGHT0,GL_AMBIENT, light_ambient);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
+    glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
+    
+    // position the camera
+    gluLookAt(2,1,3,0,1,0,0,1,0);
+    
+    glRotatef(x_angle, 0, 1,0);
+    glRotatef(y_angle, 1,0,0);
+    glScalef(scale_size, scale_size, scale_size);
+    
+    // Start to draw the scene
+    
+    draw_axes();   // the axes are the local frame for the floor
+    
+    GLfloat mat_specular[] = {.7, .7, .7,1};
+    GLfloat mat_shine[] = {60};
+    
+    glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, mat_shine);
+    
+    if (draw_texture)  {
+        glEnable(GL_TEXTURE_2D);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 64,
+                     64,0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     checkImage);
+    }
+    
+    // ------    draw floor
+    draw_floor();                 // the floow is a 4x0.01x4 cube
+    
+    if (draw_texture)  {
+        glDisable(GL_TEXTURE_2D);
+        glEnable(GL_LIGHTING);
+    }
+    
+    // -------   draw wall
+    glPushMatrix();
+    glTranslatef(-2,1.5,0);
+    glRotatef(90, 0, 0, 1);
+    draw_wall();
+    glPopMatrix();
+    
+    glPushMatrix();
+    glTranslatef(0,1.5,-2);
+    glRotatef(90, 1, 0, 0);
+    glRotatef(90, 0, 1, 0);
+    draw_wall();
+    glPopMatrix();
+    
+    glPushMatrix();
+    glTranslatef(0, 1.5, -1.98);
+    glScalef(.8, .8, .8);
+    glRotatef(90, 1, 0, 0);
+    glRotatef(90, 0, 1, 0);
+    if (draw_texture) {
+        glEnable(GL_TEXTURE_2D);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 512,
+                     256,0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     texImage2);
+    }
+    draw_picture2();
+    if (draw_texture) glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+    
+    glPushMatrix();
+    glTranslatef(-1.98, 1.5, 0);
+    glScalef(.8, .8, .8);
+    glRotatef(-90, 0, 0, 1);
+    if (draw_texture) {
+        glEnable(GL_TEXTURE_2D);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256,
+                     256,0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     texImage);
+    }
+    draw_picture();
+    if (draw_texture) glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+    
+    //---------------- draw table ------------------------
+    
+    glPushMatrix();
+    glTranslatef(-1, 1, -1);      // translate the table so that
+    // the center of table top is
+    // at (-1, 1, -1)
+    // relative to the floor
+    draw_table();                 // the table is a 2x0.1x2 cube and
+    // the table legs are  0.1 x 1 x 0.1
+    //----------------- draw lamp -----------------------
+    glPushMatrix();
+    glRotatef(-90, 1, 0, 0);
+    //glTranslatef(-.5,.5, 1.5 * BASE_WIDE);
+    glTranslatef(-.5,.5,  0.2* BASE_HEIGHT);  // position a lamp at
+    // (-.5, .5, 0.2xbase height)
+    // relative to the table
+    draw_lamp();
+    glPopMatrix();
+    //------------------ draw teapot ----------------------
+    glPushMatrix();
+    glTranslatef(0.75,.2, 0);        // position a teapot at (0,0.2,0)
+    // relative to the table
+    glScalef(.4, .4, .4);         // the size of the teapot is 0.4x0.4x0.4
+    draw_teapot();
+    glPopMatrix();                // pop teapot matrix
+    glPopMatrix();                // pop table matrix
+    
+    //------------------draw glass----------------------
+    
+    glPushMatrix();
+    glTranslatef(0.50, .1, 0);
+    
+    glScalef(4, 4, 4);
+    draw_glas();
+    glPopMatrix();
+    glPopMatrix();
+    
+    
+    //------------------- draw cube ---------------------
+    
+    
+
+    
+    glPushMatrix();
+    glTranslatef(1,.25,1);        // position a cube at (1,0.25,1)
+   
+    glScalef(.3, .5, .3);         // the size of the cube is
+    
+    draw_cube();
+    
+    
+    glPopMatrix();
+    //-------------------- done drawing --------------------
+    
+    glPushMatrix();
+    glTranslatef(1,0.60,1);        // position a cube at (1,0.25,1)
+    
+    glScalef(.2, .4, .3);         // the size of the cube is
+    
+   
+    draw_teapot();
+    draw_glas();
+    glPopMatrix();
+
+    
+    
+    //------------------------------------------------------
+    
+    glutSwapBuffers();
+}
+//----------------------------------------------------
+
+void mymouse(int button, int state, int x, int y)
+{
+    if (state == GLUT_DOWN) {
+        press_x = x; press_y = y;
+        if (button == GLUT_LEFT_BUTTON)
+            xform_mode = XFORM_ROTATE;
+        else if (button == GLUT_RIGHT_BUTTON)
+            xform_mode = XFORM_SCALE;
+    }
+    else if (state == GLUT_UP) {
+        release_x = x; release_y = y;
+        if (button == GLUT_LEFT_BUTTON) {
+            xform_mode = XFORM_ROTATE;
+            x_angle += (release_x - press_x);
+            y_angle += (release_y - press_y);
+            if (x_angle > 180) x_angle -= 360;
+            else if (x_angle <-180) x_angle += 360;
+            if (y_angle > 180) y_angle -= 360;
+            else if (y_angle <-180) y_angle += 360;
+            
+        }
+        else if (button == GLUT_RIGHT_BUTTON) {
+            xform_mode = XFORM_SCALE;
+            float old_size = scale_size;
+            scale_size -= (release_y - press_y)/60.0;
+            if (scale_size <0) scale_size = old_size;
+        }
+    }
+    display();
+}
+//-----------------------------------------------
+
+void special(int key, int x, int y) {
+    switch (key) {
+        case GLUT_KEY_UP:
+            if (zoom - 0.1 > -1) zoom -= 0.05;
+            doZoom();
+            break;
+        case GLUT_KEY_DOWN:
+            zoom += 0.05;
+            doZoom();
+            break;
+    }
+}
+
+//--------------------------------------------------
+
+void doZoom() {//zoom yapmak için kullanılan fonksiyon
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(-1.0 - zoom, 1.0 + zoom, -1.0 - zoom, 1.0 + zoom, -20.0, 20.0);
+    glMatrixMode(GL_MODELVIEW);
+    display();
+}
+
+
+
+//--------------------------------------------
+
+void mymotion(int x, int y)
+{
+    static int count = 0;
+    if (xform_mode==XFORM_ROTATE) {
+        x_angle += (x - press_x)/10.0;
+        if (x_angle > 180) x_angle -= 360;
+        else if (x_angle <-180) x_angle += 360;
+        press_x = x;
+        
+        y_angle += (y - press_y)/10.0;
+        if (y_angle > 180) y_angle -= 360;
+        else if (y_angle <-180) y_angle += 360;
+        press_y = y;
+    }
+    else if (xform_mode == XFORM_SCALE){
+        float old_size = scale_size;
+        scale_size -= (y - press_y)/60.0;
+        if (scale_size <0) scale_size = old_size;
+        press_y = y;
+    }
+    count++;
+    if (count >= 5) {display(); count = 0; }
+}
+
+//------------------------------------------------------------------
+
+void mykey(unsigned char key, int x, int y)
+{
+    if (key == 't' && draw_texture == 0)
+        draw_texture = 1;
+    else if (key == 't' && draw_texture == 1)
+        draw_texture = 0;
+    if (key == 'q') exit(1);
+    if (key == 'f') glShadeModel(GL_FLAT);
+    if (key == 's') glShadeModel(GL_SMOOTH);
+    if (key == 'n') no_light = 1;
+    if (key == 'l') no_light = 0;
+    display();
+}
+
+
+int main(int argc, char** argv)
+{
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_RGB|GLUT_DOUBLE|GLUT_DEPTH);
+    glutInitWindowSize(1000,1000);
+    
+    glutCreateWindow("Odam");
+    glutDisplayFunc(display);
+    glutMouseFunc(mymouse);
+    glutMotionFunc(mymotion);
+    glutKeyboardFunc(mykey);
+    glutSpecialFunc(special);
+    makeCheckImage();
+    read_Image();
+    read_Image2();
+    //read_Image3();
+    glutMainLoop();
+}
